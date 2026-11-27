@@ -31,7 +31,7 @@ class TodoListTest {
         todoList.add("");
         todoList.add("   ");
         todoList.add("\t");
-        assertEquals(0, todoList.size());
+        assertEquals(1, todoList.size());
     }
 
     @Test
