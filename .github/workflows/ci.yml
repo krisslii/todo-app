@@ -1,0 +1,58 @@
+name: CI / Build & Release
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-release:
+    name: Build, test and release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Make Gradle Wrapper executable
+        run: chmod +x gradlew
+
+      - name: Read project version
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(tr -d '\r' < gradle.properties | sed -n 's/^version=//p')
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Invalid version"; exit 1; }
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build and test
+        run: ./gradlew --no-daemon clean build
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: build/reports/tests/test/
+          if-no-files-found: ignore
+
+      - name: Create release and upload executable JAR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          gh release create "v$RELEASE_VERSION" \
+            "build/libs/todo-app-$RELEASE_VERSION.jar" \
+            --target "$GITHUB_SHA" \
+            --title "Release v$RELEASE_VERSION" \
+            --notes "Automated release after successful build and tests."
